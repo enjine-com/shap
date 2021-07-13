@@ -318,7 +318,7 @@ class Kernel(Explainer):
                             self.addsample(instance.x, mask, w)
                 else:
                     break
-            log.info("num_full_subsets = {0}".format(num_full_subsets))
+            # log.info("num_full_subsets = {0}".format(num_full_subsets))
 
             # add random samples from what is left of the subset space
             nfixed_samples = self.nsamplesAdded
@@ -329,8 +329,8 @@ class Kernel(Explainer):
                 remaining_weight_vector[:num_paired_subset_sizes] /= 2 # because we draw two samples each below
                 remaining_weight_vector = remaining_weight_vector[num_full_subsets:]
                 remaining_weight_vector /= np.sum(remaining_weight_vector)
-                log.info("remaining_weight_vector = {0}".format(remaining_weight_vector))
-                log.info("num_paired_subset_sizes = {0}".format(num_paired_subset_sizes))
+                # log.info("remaining_weight_vector = {0}".format(remaining_weight_vector))
+                # log.info("num_paired_subset_sizes = {0}".format(num_paired_subset_sizes))
                 ind_set = np.random.choice(len(remaining_weight_vector), 4 * samples_left, p=remaining_weight_vector)
                 ind_set_pos = 0
                 used_masks = {}
@@ -369,7 +369,7 @@ class Kernel(Explainer):
                 # normalize the kernel weights for the random samples to equal the weight left after
                 # the fixed enumerated samples have been already counted
                 weight_left = np.sum(weight_vector[num_full_subsets:])
-                log.info("weight_left = {0}".format(weight_left))
+                # log.info("weight_left = {0}".format(weight_left))
                 self.kernelWeights[nfixed_samples:] *= weight_left / self.kernelWeights[nfixed_samples:].sum()
 
             # execute the model on the synthetic samples we have created
@@ -392,8 +392,8 @@ class Kernel(Explainer):
     @staticmethod
     def not_equal(i, j):
         if isinstance(i, str) or isinstance(j, str):
-            return 0 if i == j else 1
-        return 0 if np.isclose(i, j, equal_nan=True) else 1
+            return not i == j
+        return not np.allclose(i, j, equal_nan=True)
 
     def varying_groups(self, x):
         if not sp.sparse.issparse(x):
@@ -406,8 +406,7 @@ class Kernel(Explainer):
                         varying[i] = False
                         continue
                     x_group = x_group.todense()
-                num_mismatches = np.sum(np.frompyfunc(self.not_equal, 2, 1)(x_group, self.data.data[:, inds]))
-                varying[i] = num_mismatches > 0
+                varying[i] = self.not_equal(x_group, self.data.data[:, inds])
             varying_indices = np.nonzero(varying)[0]
             return varying_indices
         else:
@@ -516,13 +515,10 @@ class Kernel(Explainer):
         self.y[self.nsamplesRun * self.N:self.nsamplesAdded * self.N, :] = np.reshape(modelOut, (num_to_run, self.D))
 
         # find the expected value of each output
-        for i in range(self.nsamplesRun, self.nsamplesAdded):
-            eyVal = np.zeros(self.D)
-            for j in range(0, self.N):
-                eyVal += self.y[i * self.N + j, :] * self.data.weights[j]
+        i = np.arange(self.nsamplesRun, self.nsamplesAdded * self.N).reshape(self.N, -1)
 
-            self.ey[i, :] = eyVal
-            self.nsamplesRun += 1
+        self.ey[self.nsamplesRun:self.nsamplesAdded] = np.sum(self.y[i, :] * self.data.weights.reshape(self.N, -1), axis=1).reshape(-1, 1)
+        self.nsamplesRun += self.nsamplesAdded - self.nsamplesRun
 
     def solve(self, fraction_evaluated, dim):
         eyAdj = self.linkfv(self.ey[:, dim]) - self.link.f(self.fnull[dim])
@@ -538,8 +534,8 @@ class Kernel(Explainer):
         #     )
         if (self.l1_reg not in ["auto", False, 0]) or (fraction_evaluated < 0.2 and self.l1_reg == "auto"):
             w_aug = np.hstack((self.kernelWeights * (self.M - s), self.kernelWeights * s))
-            log.info("np.sum(w_aug) = {0}".format(np.sum(w_aug)))
-            log.info("np.sum(self.kernelWeights) = {0}".format(np.sum(self.kernelWeights)))
+            # log.info("np.sum(w_aug) = {0}".format(np.sum(w_aug)))
+            # log.info("np.sum(self.kernelWeights) = {0}".format(np.sum(self.kernelWeights)))
             w_sqrt_aug = np.sqrt(w_aug)
             eyAdj_aug = np.hstack((eyAdj, eyAdj - (self.link.f(self.fx[dim]) - self.link.f(self.fnull[dim]))))
             eyAdj_aug *= w_sqrt_aug
@@ -594,7 +590,7 @@ class Kernel(Explainer):
         phi = np.zeros(self.M)
         phi[nonzero_inds[:-1]] = w
         phi[nonzero_inds[-1]] = (self.link.f(self.fx[dim]) - self.link.f(self.fnull[dim])) - sum(w)
-        log.info("phi = {0}".format(phi))
+        # log.info("phi = {0}".format(phi))
 
         # clean up any rounding errors
         for i in range(self.M):
