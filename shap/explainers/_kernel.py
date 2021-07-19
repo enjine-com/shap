@@ -515,10 +515,10 @@ class Kernel(Explainer):
         self.y[self.nsamplesRun * self.N:self.nsamplesAdded * self.N, :] = np.reshape(modelOut, (num_to_run, self.D))
 
         # find the expected value of each output
-        i = np.arange(self.nsamplesRun, self.nsamplesAdded * self.N).reshape(self.N, -1)
-
-        self.ey[self.nsamplesRun:self.nsamplesAdded] = np.sum(self.y[i, :] * self.data.weights.reshape(self.N, -1), axis=1).reshape(-1, 1)
-        self.nsamplesRun += self.nsamplesAdded - self.nsamplesRun
+        indices = np.arange(self.nsamplesRun, self.nsamplesAdded * self.N).reshape(-1, self.N)
+        for i in indices:
+            self.ey[self.nsamplesRun, :] = np.sum(self.y[i, :] * self.data.weights.reshape(self.N, -1), axis=0)
+            self.nsamplesRun += 1
 
     def solve(self, fraction_evaluated, dim):
         eyAdj = self.linkfv(self.ey[:, dim]) - self.link.f(self.fnull[dim])
